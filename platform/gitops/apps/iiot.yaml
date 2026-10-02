@@ -1,0 +1,12 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: ashkan-iiot, namespace: argocd}
+spec:
+  project: default
+  source:
+    repoURL: https://example.invalid/replace-with-your-repository.git
+    targetRevision: main
+    path: deploy/helm/iiot
+    helm: {valueFiles: [values.yaml]}
+  destination: {server: https://kubernetes.default.svc, namespace: iiot}
+  syncPolicy: {automated: {prune: true, selfHeal: true}, syncOptions: [CreateNamespace=true]}

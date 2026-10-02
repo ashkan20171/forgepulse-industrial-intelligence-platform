@@ -1,0 +1,27 @@
+replicaCount: 2
+image:
+  repository: ashkan/industrial-iot-platform
+  tag: "20.0.0"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits: {cpu: "1", memory: 1Gi}
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+config:
+  ENVIRONMENT: production
+  MQTT_BROKER: mosquitto
+  INFLUXDB_URL: http://influxdb:8086
+  REDIS_URL: redis://redis:6379/0
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+secretRefs:
+  existingSecret: iiot-secrets

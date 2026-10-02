@@ -1,0 +1,14 @@
+name: supply-chain
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/sbom-action@v0
+        with: {path: '.', format: cyclonedx-json, output-file: sbom.cdx.json}
+      - uses: aquasecurity/trivy-action@0.28.0
+        with: {scan-type: fs, scan-ref: '.', format: table, severity: 'HIGH,CRITICAL', exit-code: '0'}
+      - uses: actions/upload-artifact@v4
+        with: {name: sbom, path: sbom.cdx.json}

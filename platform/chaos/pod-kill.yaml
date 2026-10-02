@@ -1,0 +1,8 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata: {name: iiot-api-pod-kill, namespace: iiot}
+spec:
+  action: pod-kill
+  mode: one
+  selector: {labelSelectors: {app.kubernetes.io/name: iiot}}
+  duration: 30s

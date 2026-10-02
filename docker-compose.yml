@@ -1,0 +1,98 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports: ["1883:1883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+  influxdb:
+    image: influxdb:2.7
+    ports: ["8086:8086"]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: change-this-password
+      DOCKER_INFLUXDB_INIT_ORG: industrial_io
+      DOCKER_INFLUXDB_INIT_BUCKET: sensor_data
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: local-development-token-change-me
+    volumes: ["influxdb_data:/var/lib/influxdb2"]
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: iiot
+      POSTGRES_USER: iiot
+      POSTGRES_PASSWORD: iiot-local-change-me
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iiot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  redpanda:
+    image: redpandadata/redpanda:v24.2.18
+    command: ["redpanda","start","--overprovisioned","--smp","1","--memory","512M","--reserve-memory","0M","--node-id","0","--check=false","--kafka-addr","PLAINTEXT://0.0.0.0:9092","--advertise-kafka-addr","PLAINTEXT://redpanda:9092"]
+    volumes: ["redpanda_data:/var/lib/redpanda/data"]
+  redpanda-console:
+    image: redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports: ["8088:8080"]
+    depends_on: [redpanda]
+  api:
+    build: ./backend
+    ports: ["8000:8000"]
+    environment:
+      MQTT_BROKER: mosquitto
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: local-development-token-change-me
+      CORS_ORIGINS: http://localhost:8000
+      POSTGRES_URL: postgresql://iiot:iiot-local-change-me@postgres:5432/iiot
+      REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      AUTH_SECRET: local-dev-secret-change-before-production
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    depends_on: [mosquitto, influxdb, postgres, redis, redpanda]
+  simulator:
+    build: ./backend
+    command: ["python","-m","app.simulator"]
+    environment:
+      MQTT_BROKER: mosquitto
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: local-development-token-change-me
+    depends_on: [mosquitto, api]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes: ["./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana:11.3.1
+    volumes: ["./observability/grafana/provisioning:/etc/grafana/provisioning:ro"]
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+  otel-collector:
+    image: otel/opentelemetry-collector:0.114.0
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes: ["./observability/otel-collector.yml:/etc/otelcol/config.yml:ro"]
+    ports: ["4317:4317", "4318:4318"]
+
+volumes:
+  mosquitto_data:
+  influxdb_data:
+  postgres_data:
+  redis_data:
+  redpanda_data:
